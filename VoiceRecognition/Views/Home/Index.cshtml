@@ -1,0 +1,253 @@
+﻿@{
+    ViewBag.Title = "Voice Recognizer for IE";
+}
+@section styles{
+    <style>
+
+        #record {
+            color: red;
+        }
+
+        #levelbase {
+            width: 400px;
+            height: 25px;
+            background-color: #EEEEEE;
+            border: 1px solid #CCCCCC;
+        }
+
+        #levelbar {
+            height: 25px;
+            width: 4px;
+            background-color: red;
+        }
+
+
+        #rec-ctrl {
+            width: 400px;
+            background: #EEEEEE;
+            border: 1px solid #CCCCCC;
+            padding: 5px;
+        }
+    </style>
+}
+
+@section scripts{
+    <script src="~/dist/justrec/justrec.js"></script>
+   <script type="text/javascript">
+       $(document).ready(function () {
+
+           $.ajaxSetup({
+               // Disable caching of AJAX responses
+               cache: false
+           });
+
+           // INITIALIZATION
+           justrec.init({
+               swf_path: '@Url.Content("~/dist/justrec/justrec.swf")',
+               host: '@Url.Action("ProcessSpeechResponse", "Home")',
+
+               recordingStarted: justStarted,
+               recordingStopped: justStopped,
+               recordingError: recordError,
+
+               recordingActivity: function (time, level) { activity(time, level); },
+
+               sendingFinished: sendingFinished,
+               sendingProgress: function (percent) { sending(percent); },
+
+               mp3Converting: function (percent) { converting(percent); },
+               mp3Converted: converted,
+               mp3ConvertingError: convertError
+           }, 'myflashrec');
+
+           // COMMANDS
+           var maxTime; // store maximum time for recording globally
+
+           $('#record').click(function () {
+               $('#stop').prop('disabled', false);
+               $('#record').prop('disabled', true);
+
+               // define maxTime from select field
+               maxTime = parseInt($('#maxtime').val());
+               if (!$.isNumeric(maxTime))
+                   maxTime = 30;
+               else if (maxTime < 1 || maxTime > 600)
+                   maxTime = 30;
+
+               __log('** justrec.record(' + maxTime + ')');
+               justrec.record(maxTime);
+           });
+
+           $('#stop').click(function () {
+               __log('** justrec.stop()')
+               justrec.stop();
+           });
+
+           $('#preview').click(function () {
+               __log('** justrec.preview()');
+               justrec.preview();
+           });
+           $('#stoppreview').click(function () {
+               __log('** justrec.stoppreview()');
+               justrec.stoppreview();
+           });
+
+           $('#convert').click(function () {
+               __log('** justrec.convert()');
+
+               $('#level').text('');
+               justrec.convert();
+           });
+
+          
+
+           // EVENTS
+
+           function recordError() {
+               __log('?? Recording error');
+           }
+
+           function justStarted() {
+               __log('Recording is started');
+           }
+
+           function justStopped() {
+               $('#record').prop('disabled', false);
+               $('#stop').prop('disabled', true);
+
+               __log('Stop request is accepted');
+           }
+
+           // sending process
+           function sending(percent) {
+               __log('..sending file to server: ' + percent + '%');
+
+               var wid = Math.round($('#levelbase').width() * (percent / 100));
+               $('#levelbar').width(wid);
+
+           }
+
+           function sendingFinished() {
+
+
+               var cUrl = '@Url.Action("GetSpeechResponseFromSession", "Home")';
+               $.get(cUrl, function (cResp) {
+
+                   //alert(cResp);
+                   var oResp = JSON.parse(cResp);
+                   
+                   console.log(oResp);
+
+                   if (oResp.RecognitionStatus == "Success") {
+                       $("#log").html("Human Voice Detected..");
+
+                       if (oResp.DisplayText) {
+                           $("#log").append("<br/><br/>" + oResp.DisplayText);
+                       }
+
+                   } else {
+                       $("#log").html("No Human Voice Detected..");
+                   }
+
+               });
+           }
+
+           function activity(time, level) {
+               // maxTime - global var
+               var time = maxTime - time;
+               if (time < 0) time = 0;
+               var min = Math.floor(time / 60),
+                   sec = Math.floor(time % 60);
+
+               $('#time').text((min < 10 ? "0" : "") + min + ":" + (sec < 10 ? "0" : "") + sec);
+
+               $('#level').text(level);
+
+               if (level == -1)
+                   $('#levelbar').width(4);
+               else
+                   $('#levelbar').width(level * 4);
+           }
+
+           // MP3 converting process event callbacks
+           function converting(percent) {
+               __log('..converting to MP3: ' + percent + '%');
+               var wid = Math.round($('#levelbase').width() * (percent / 100));
+               $('#levelbar').width(wid);
+
+           }
+
+           function converted() {
+               __log('!! Converting to MP3 succeeded');
+
+               __log('** justrec.send()');
+
+               $('#level').text('');
+               justrec.send();
+
+           }
+
+           function convertError() {
+               __log('?? Error converting to MP3');
+           }
+
+           // let's log...
+           function __log(s) {
+               $('#log').html(s);
+           }
+
+       });
+
+    </script>
+
+}
+
+
+
+<br />
+
+<div id="myflashrec">
+
+    <div id="rec-ctrl">
+        <strong>maxTime</strong>:
+        <select id="maxtime" title="Select maximum time for recording">
+            <option value="5">5 sec</option>
+            <option value="10">10 sec</option>
+            <option value="30" selected>30 sec</option>
+            <option value="60">1 min</option>
+            <option value="90">1.5 min</option>
+            <option value="120">2 min</option>
+            <option value="180">3 min</option>
+        </select>
+        &nbsp;&nbsp;&nbsp;
+        <strong>Time left</strong>: <span id="time">00:00</span>
+        <input type="hidden" id="recn" value="%%RECN%%">
+
+    </div>
+    <br>
+    <div>
+        <strong>Level</strong>: <span id="level"></span>
+    </div>
+    <div>
+        <div id="levelbase">
+            <div id="levelbar"></div>
+        </div>
+    </div>
+    <hr>
+    <div>
+        <input type="button" id="record" value="Record">
+        <input disabled type="button" id="stop" value="Stop">
+
+        <input type="button" id="preview" value="Preview">
+        <input type="button" id="stoppreview" value="Stop preview">
+
+        <br><br>
+
+        <input type="button" id="convert" value="Process Recording">
+        <br>
+    </div>
+
+
+</div>
+
+<div class="well" id="log"></div>
